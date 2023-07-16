@@ -109,7 +109,7 @@ const run = async () => {
         return;
       } 
       res.json({ message: 'Added WishList successfully' });
-    });
+    }); 
 
     app.get('/wishlist/:email', async (req, res) => {
       const userEmail = req.params.email;
@@ -156,6 +156,64 @@ const run = async () => {
         res.json({ message: 'Wishlist item deleted successfully' });
       } else {
         res.status(404).json({ error: 'Wishlist item not found' });
+      }
+    });
+
+    app.post('/addToRead/:id', async (req, res) => {
+      const bookId = req.params.id;
+      const addRead = req.body.addRead;
+ 
+      const result = await bookCollection.updateOne(
+        { _id: ObjectId(bookId) },
+        { $push: { addRead: addRead } }
+      );
+ 
+
+      if (result.modifiedCount !== 1) { 
+        res.json({ error: 'Book not found' });
+        return;
+      } 
+      res.json({ message: 'Add To Read successfully' });
+    });
+    
+    app.get('/addToRead/:email', async (req, res) => {
+      const userEmail = req.params.email;
+    
+      const result = await bookCollection.aggregate([
+        {
+          $match: {
+            "addRead.readUser": userEmail
+          }
+        },
+        {
+          $project: {
+            _id: 1,
+            title: 1,
+            author: 1,
+            genre: 1,
+            publicationDate: 1,
+            wishlist: {
+              $filter: {
+                input: "$wishlist",
+                as: "item",
+                cond: { $eq: ["$$item.wishListUser", userEmail] }
+              }
+            },
+            addRead: {
+              $filter: {
+                input: "$addRead",
+                as: "item",
+                cond: { $eq: ["$$item.readUser", userEmail] }
+              }
+            }
+          }
+        }
+      ]).toArray();
+    
+      if (result && result.length > 0) {
+        res.json(result);
+      } else {
+        res.status(404).json({ error: 'wishlist not found' });
       }
     });
   } catch(err){
