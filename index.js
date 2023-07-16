@@ -1,16 +1,19 @@
-require('dotenv').config();
-const express = require('express');
 const { MongoClient, ServerApiVersion, ObjectId } = require('mongodb');
+const express = require('express');
+
+require('dotenv').config();
+
 const app = express();
-const port = process.env.PORT || 5000;
+const port = 5000;
 
 const cors = require('cors');
 
 app.use(cors());
 app.use(express.json());
 
-const uri = `mongodb+srv://${process.env.DB_USER}:${process.env.DB_PASS}@cluster0.euxm4cs.mongodb.net/?retryWrites=true&w=majority`;
-const client = new MongoClient(uri, {
+const dbUri = process.env.MONGODB_URL;
+
+const client = new MongoClient(dbUri, {
   useNewUrlParser: true,
   useUnifiedTopology: true,
   serverApi: ServerApiVersion.v1,
@@ -18,99 +21,145 @@ const client = new MongoClient(uri, {
 
 const run = async () => {
   try {
-    const db = client.db('tech-net');
-    const productCollection = db.collection('product');
+    const db = client.db('book-catalog');
+    const bookCollection = db.collection('books'); 
 
-    app.get('/products', async (req, res) => {
-      const cursor = productCollection.find({});
-      const product = await cursor.toArray();
-
-      res.send({ status: true, data: product });
+    app.get('/books', async (req, res) => {
+      const cursor = bookCollection.find({});
+      const books = await cursor.toArray(); 
+      
+      res.send({ status: true, data: books });
     });
 
-    app.post('/product', async (req, res) => {
-      const product = req.body;
-
-      const result = await productCollection.insertOne(product);
+    app.post('/book', async (req, res) => { 
+      const bookDetail = req.body;
+      const result = await bookCollection.insertOne(bookDetail);
 
       res.send(result);
     });
 
-    app.get('/product/:id', async (req, res) => {
-      const id = req.params.id;
-
-      const result = await productCollection.findOne({ _id: ObjectId(id) });
-      console.log(result);
-      res.send(result);
-    });
-
-    app.delete('/product/:id', async (req, res) => {
-      const id = req.params.id;
-
-      const result = await productCollection.deleteOne({ _id: ObjectId(id) });
-      console.log(result);
-      res.send(result);
-    });
-
-    app.post('/comment/:id', async (req, res) => {
-      const productId = req.params.id;
-      const comment = req.body.comment;
-
-      console.log(productId);
-      console.log(comment);
-
-      const result = await productCollection.updateOne(
-        { _id: ObjectId(productId) },
-        { $push: { comments: comment } }
+    app.patch('/book/:id', async (req, res) => {
+      const bookDetail = req.body;
+      const result = await bookCollection.findOneAndUpdate(
+        { _id: ObjectId(req.params.id) },
+        { $set: bookDetail },  
+        { returnOriginal: false }  
       );
+      res.send(result);
+    });
 
-      console.log(result);
+    app.get('/book/:id', async (req, res) => {
+      const id = req.params.id;
 
-      if (result.modifiedCount !== 1) {
-        console.error('Product not found or comment not added');
-        res.json({ error: 'Product not found or comment not added' });
+      const result = await bookCollection.findOne({ _id: ObjectId(id) }); 
+      res.send(result);
+    });
+
+    app.delete('/book/:id', async (req, res) => {
+      const id = req.params.id;
+
+      const result = await bookCollection.deleteOne({ _id: ObjectId(id) }); 
+      res.send(result);
+    });
+
+    app.post('/reviews/:id', async (req, res) => {
+      const bookId = req.params.id;
+      const review = req.body.reviews;
+ 
+      const result = await bookCollection.updateOne(
+        { _id: ObjectId(bookId) },
+        { $push: { reviews: review } }
+      );
+ 
+
+      if (result.modifiedCount !== 1) { 
+        res.json({ error: 'Book not found' });
         return;
-      }
-
-      console.log('Comment added successfully');
-      res.json({ message: 'Comment added successfully' });
+      } 
+      res.json({ message: 'Added Reviews successfully' });
     });
 
-    app.get('/comment/:id', async (req, res) => {
-      const productId = req.params.id;
-
-      const result = await productCollection.findOne(
-        { _id: ObjectId(productId) },
-        { projection: { _id: 0, comments: 1 } }
-      );
+    app.get('/review/:id', async (req, res) => {
+      const bookId = req.params.id;
+      
+      const result = await bookCollection.findOne(
+        { _id: ObjectId(bookId) },
+        { projection: { reviews: 1 } }
+      )
 
       if (result) {
         res.json(result);
       } else {
-        res.status(404).json({ error: 'Product not found' });
+        res.status(404).json({ error: 'book not found' });
       }
     });
 
-    app.post('/user', async (req, res) => {
-      const user = req.body;
+    app.post('/wishlist/:id', async (req, res) => {
+      const bookId = req.params.id;
+      const wishlist = req.body.wishlist;
+ 
+      const result = await bookCollection.updateOne(
+        { _id: ObjectId(bookId) },
+        { $push: { wishlist: wishlist } }
+      );
+ 
 
-      const result = await userCollection.insertOne(user);
-
-      res.send(result);
+      if (result.modifiedCount !== 1) { 
+        res.json({ error: 'Book not found' });
+        return;
+      } 
+      res.json({ message: 'Added WishList successfully' });
     });
 
-    app.get('/user/:email', async (req, res) => {
-      const email = req.params.email;
-
-      const result = await userCollection.findOne({ email });
-
-      if (result?.email) {
-        return res.send({ status: true, data: result });
+    app.get('/wishlist/:email', async (req, res) => {
+      const userEmail = req.params.email;
+    
+      const result = await bookCollection.aggregate([
+        {
+          $match: {
+            "wishlist.wishListUser": userEmail
+          }
+        },
+        {
+          $project: {
+            _id: 1,
+            title: 1,
+            author: 1,
+            genre: 1,
+            publicationDate: 1,
+            wishlist: {
+              $filter: {
+                input: "$wishlist",
+                as: "item",
+                cond: { $eq: ["$$item.wishListUser", userEmail] }
+              }
+            }
+          }
+        }
+      ]).toArray();
+    
+      if (result && result.length > 0) {
+        res.json(result);
+      } else {
+        res.status(404).json({ error: 'wishlist not found' });
       }
-
-      res.send({ status: false });
     });
-  } finally {
+    app.delete('/wishlist/:wishlistId', async (req, res) => {
+      const wishlistId = req.params.wishlistId;
+    
+      const result = await bookCollection.findOneAndUpdate(
+        { "wishlist.wishListId": wishlistId },
+        { $pull: { wishlist: { wishListId: wishlistId } } }
+      );
+    
+      if (result.value) {
+        res.json({ message: 'Wishlist item deleted successfully' });
+      } else {
+        res.status(404).json({ error: 'Wishlist item not found' });
+      }
+    });
+  } catch(err){
+    console.log("error ", err)
   }
 };
 
