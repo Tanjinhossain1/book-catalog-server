@@ -25,7 +25,7 @@ const run = async () => {
     const bookCollection = db.collection('books'); 
 
     app.get('/books', async (req, res) => {
-      const cursor = bookCollection.find({});
+      const cursor = bookCollection.find({}).sort({ _id: -1 })
       const books = await cursor.toArray(); 
       
       res.send({ status: true, data: books });
@@ -175,7 +175,26 @@ const run = async () => {
       } 
       res.json({ message: 'Add To Read successfully' });
     });
-    
+
+    app.patch('/addToRead/:readBookId', async (req, res) => {
+      const readBookId = req.params.readBookId; 
+
+  const result = await bookCollection.updateOne(
+    {  
+      "addRead.ReadBookId": readBookId 
+    },
+    { 
+      $set: { "addRead.$.isComplete": true } 
+    }
+  );
+
+  if (result.modifiedCount !== 1) {
+    res.json({ error: 'Book or ReadBookId not found' });
+    return;
+  }
+  res.json({ message: 'Add To Read successfully' });
+    });
+
     app.get('/addToRead/:email', async (req, res) => {
       const userEmail = req.params.email;
     
